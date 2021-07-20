@@ -39,6 +39,8 @@ class RedshiftToS3Operator(BaseOperator):
     :param table: reference to a specific table in redshift database
         Used when ``select_query`` param not provided.
     :type table: str
+    :param pre_unload_query: custom pre select query executed before the unload
+    :type pre_unload_query: str
     :param select_query: custom select query to fetch data from redshift database
     :type select_query: str
     :param redshift_conn_id: reference to a specific redshift database
@@ -83,6 +85,7 @@ class RedshiftToS3Operator(BaseOperator):
         s3_key: str,
         schema: str = None,
         table: str = None,
+        pre_unload_query: str = None,
         select_query: str = None,
         redshift_conn_id: str = 'redshift_default',
         aws_conn_id: str = 'aws_default',
@@ -98,6 +101,7 @@ class RedshiftToS3Operator(BaseOperator):
         self.s3_key = f'{s3_key}/{table}_' if (table and table_as_file_name) else s3_key
         self.schema = schema
         self.table = table
+        self.pre_unload_query = pre_unload_query
         self.redshift_conn_id = redshift_conn_id
         self.aws_conn_id = aws_conn_id
         self.verify = verify
@@ -121,9 +125,15 @@ class RedshiftToS3Operator(BaseOperator):
             ]
 
     def _build_unload_query(
-        self, credentials_block: str, select_query: str, s3_key: str, unload_options: str
+        self,
+        credentials_block: str,
+        pre_unload_query: str,
+        select_query: str,
+        s3_key: str,
+        unload_options: str
     ) -> str:
         return f"""
+                    {pre_unload_query}
                     UNLOAD ('{select_query}')
                     TO 's3://{self.s3_bucket}/{s3_key}'
                     with credentials
@@ -140,7 +150,7 @@ class RedshiftToS3Operator(BaseOperator):
         unload_options = '\n\t\t\t'.join(self.unload_options)
 
         unload_query = self._build_unload_query(
-            credentials_block, self.select_query, self.s3_key, unload_options
+            credentials_block, self.pre_unload_query, self.select_query, self.s3_key, unload_options
         )
 
         self.log.info('Executing UNLOAD command...')
